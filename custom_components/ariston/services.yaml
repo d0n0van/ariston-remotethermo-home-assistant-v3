@@ -61,3 +61,25 @@ set_item_by_id:
       example: "1"
       selector:
         text:
+get_api_stats:
+  name: Get API Statistics
+  description: Get API call statistics and performance metrics for monitoring
+  fields:
+    device_id:
+      name: Device
+      description: Ariston device to get statistics for.
+      required: true
+      selector:
+        device:
+          integration: ariston
+force_refresh:
+  name: Force Refresh
+  description: Force refresh all cached data and trigger immediate updates
+  fields:
+    device_id:
+      name: Device
+      description: Ariston device to force refresh.
+      required: true
+      selector:
+        device:
+          integration: ariston
