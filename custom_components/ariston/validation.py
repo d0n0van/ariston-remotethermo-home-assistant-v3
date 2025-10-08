@@ -39,6 +39,7 @@ CONFIG_SCHEMA = vol.Schema(
             cv.string,
             vol.Length(min=10, max=200),
         ),
+        vol.Optional("device"): vol.Any(dict, None),
     }
 )
 
