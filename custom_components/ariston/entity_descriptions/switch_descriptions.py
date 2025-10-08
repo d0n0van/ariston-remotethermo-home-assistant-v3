@@ -20,3 +20,5 @@ def create_switch_descriptions() -> list[Any]:
 # Create the switch types list
 ARISTON_SWITCH_TYPES = create_switch_descriptions()
 
+
+

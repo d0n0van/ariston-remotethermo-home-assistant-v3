@@ -51,3 +51,5 @@ def create_climate_descriptions() -> list[Any]:
 # Create the climate types list
 ARISTON_CLIMATE_TYPES = create_climate_descriptions()
 
+
+

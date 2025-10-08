@@ -20,3 +20,5 @@ def create_select_descriptions() -> list[Any]:
 # Create the select types list
 ARISTON_SELECT_TYPES = create_select_descriptions()
 
+
+

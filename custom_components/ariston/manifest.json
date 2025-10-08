@@ -1,7 +1,8 @@
 {
   "domain": "ariston",
   "name": "Ariston",
-  "codeowners": ["@fustom"],
+  "codeowners": ["@d0n0van"],
+  "original_author": "@fustom",
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/d0n0van/ariston-remotethermo-home-assistant-v3",
@@ -11,6 +12,6 @@
   "loggers": ["ariston"],
   "requirements": ["ariston==0.19.9"],
   "ssdp": [],
-  "version": "0.20.8",
+  "version": "0.20.9",
   "zeroconf": []
 }

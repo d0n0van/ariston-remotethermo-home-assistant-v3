@@ -20,3 +20,5 @@ def create_number_descriptions() -> list[Any]:
 # Create the number types list
 ARISTON_NUMBER_TYPES = create_number_descriptions()
 
+
+

@@ -54,3 +54,5 @@ def create_water_heater_descriptions() -> list[Any]:
 # Create the water heater types list
 ARISTON_WATER_HEATER_TYPES = create_water_heater_descriptions()
 
+
+

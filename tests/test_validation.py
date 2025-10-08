@@ -180,3 +180,5 @@ class TestValidationFunctions:
         result = safe_get_temperature(200)
         assert result == 20.0  # default value
 
+
+

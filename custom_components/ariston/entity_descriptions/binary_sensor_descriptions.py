@@ -87,3 +87,5 @@ def create_binary_sensor_descriptions() -> list[Any]:
 # Create the binary sensor types list
 ARISTON_BINARY_SENSOR_TYPES = create_binary_sensor_descriptions()
 
+
+

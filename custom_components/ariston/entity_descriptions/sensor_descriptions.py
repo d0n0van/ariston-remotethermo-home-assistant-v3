@@ -169,3 +169,5 @@ def create_sensor_descriptions() -> list[Any]:
 # Create the sensor types list
 ARISTON_SENSOR_TYPES = create_sensor_descriptions()
 
+
+

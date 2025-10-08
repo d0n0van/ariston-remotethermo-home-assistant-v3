@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
 import voluptuous as vol
 
-from ariston import Ariston, DeviceAttribute, SystemType
+from ariston import Ariston, DeviceAttribute
 from ariston.const import ARISTON_API_URL, ARISTON_USER_AGENT
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -55,10 +54,6 @@ PLATFORMS: list[str] = [
     Platform.WATER_HEATER,
 ]
 
-# Additional platforms for enhanced functionality
-ADDITIONAL_PLATFORMS: list[str] = [
-    "temperature_sensors",  # Custom temperature sensors platform
-]
 
 SERVICE_SET_ITEM_BY_ID = "set_item_by_id"
 SERVICE_GET_API_STATS = "get_api_stats"
