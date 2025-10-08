@@ -131,6 +131,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _validate_and_prepare_config(entry: ConfigEntry) -> dict[str, Any]:
     """Validate configuration and prepare for setup."""
     try:
+        _LOGGER.debug("Entry data type: %s, value: %s", type(entry.data), entry.data)
+        if not isinstance(entry.data, dict):
+            _LOGGER.error("Entry data is not a dictionary: %s (type: %s)", entry.data, type(entry.data))
+            raise ConfigEntryNotReady(f"Entry data is not a dictionary: {type(entry.data)}")
+        
         validated_config = validate_config_entry(entry.data)
         _LOGGER.debug("Configuration validation successful")
     except ValidationError as err:

@@ -83,6 +83,13 @@ class ConfigValidator:
         """Validate configuration data."""
         self._errors.clear()
         
+        _LOGGER.debug("Validating config: type=%s, value=%s", type(config), config)
+        
+        if not isinstance(config, dict):
+            error_msg = f"Configuration must be a dictionary, got: {type(config)}"
+            _LOGGER.error(error_msg)
+            raise ValidationError(error_msg)
+        
         try:
             validated_config = CONFIG_SCHEMA(config)
             _LOGGER.debug("Configuration validation successful")
