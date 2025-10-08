@@ -296,6 +296,8 @@ async def _setup_additional_platforms(hass: HomeAssistant, entry: ConfigEntry) -
         await setup_temperature_sensors(hass, entry, lambda entities: None)
         _LOGGER.info("Set up temperature sensors platform")
             
+    except ImportError as err:
+        _LOGGER.warning("Temperature sensors module not available: %s", err)
     except Exception as err:
         _LOGGER.warning("Failed to set up additional platforms: %s", err)
 
