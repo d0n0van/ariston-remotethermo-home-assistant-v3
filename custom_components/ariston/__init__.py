@@ -132,11 +132,18 @@ async def _validate_and_prepare_config(entry: ConfigEntry) -> dict[str, Any]:
     """Validate configuration and prepare for setup."""
     try:
         _LOGGER.debug("Entry data type: %s, value: %s", type(entry.data), entry.data)
-        if not isinstance(entry.data, dict):
-            _LOGGER.error("Entry data is not a dictionary: %s (type: %s)", entry.data, type(entry.data))
-            raise ConfigEntryNotReady(f"Entry data is not a dictionary: {type(entry.data)}")
         
-        validated_config = validate_config_entry(entry.data)
+        # Convert mappingproxy or other mapping types to regular dict
+        if hasattr(entry.data, 'items') and not isinstance(entry.data, dict):
+            _LOGGER.debug("Converting %s to dict", type(entry.data))
+            entry_data = dict(entry.data)
+        elif isinstance(entry.data, dict):
+            entry_data = entry.data
+        else:
+            _LOGGER.error("Entry data is not a dictionary or mapping: %s (type: %s)", entry.data, type(entry.data))
+            raise ConfigEntryNotReady(f"Entry data is not a dictionary or mapping: {type(entry.data)}")
+        
+        validated_config = validate_config_entry(entry_data)
         _LOGGER.debug("Configuration validation successful")
     except ValidationError as err:
         _LOGGER.error("Configuration validation failed: %s", err)

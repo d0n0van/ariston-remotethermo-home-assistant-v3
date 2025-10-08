@@ -85,8 +85,12 @@ class ConfigValidator:
         
         _LOGGER.debug("Validating config: type=%s, value=%s", type(config), config)
         
-        if not isinstance(config, dict):
-            error_msg = f"Configuration must be a dictionary, got: {type(config)}"
+        # Handle mappingproxy and other mapping types
+        if hasattr(config, 'items') and not isinstance(config, dict):
+            _LOGGER.debug("Converting %s to dict for validation", type(config))
+            config = dict(config)
+        elif not isinstance(config, dict):
+            error_msg = f"Configuration must be a dictionary or mapping, got: {type(config)}"
             _LOGGER.error(error_msg)
             raise ValidationError(error_msg)
         
