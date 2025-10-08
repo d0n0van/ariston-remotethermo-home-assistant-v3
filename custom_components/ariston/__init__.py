@@ -288,18 +288,8 @@ async def _setup_coordinators(hass: HomeAssistant, entry: ConfigEntry, device: A
 
 async def _setup_additional_platforms(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Set up additional platforms for enhanced functionality."""
-    try:
-        # Import and set up temperature sensors
-        from .temperature_sensors import async_setup_entry as setup_temperature_sensors
-        
-        # Set up temperature sensors
-        await setup_temperature_sensors(hass, entry, lambda entities: None)
-        _LOGGER.info("Set up temperature sensors platform")
-            
-    except ImportError as err:
-        _LOGGER.warning("Temperature sensors module not available: %s", err)
-    except Exception as err:
-        _LOGGER.warning("Failed to set up additional platforms: %s", err)
+    # Temperature sensors are now integrated into the main sensor platform
+    _LOGGER.info("Additional platforms setup completed")
 
 
 async def _setup_services(hass: HomeAssistant) -> None:

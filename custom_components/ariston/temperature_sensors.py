@@ -238,3 +238,6 @@ async def async_setup_entry(
     if temperature_sensors:
         # Add entities to Home Assistant
         async_add_entities(temperature_sensors)
+        _LOGGER.info("Successfully registered %d temperature sensors", len(temperature_sensors))
+    else:
+        _LOGGER.warning("No temperature sensors created for device %s", device.name)

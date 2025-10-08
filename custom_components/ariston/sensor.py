@@ -42,6 +42,13 @@ async def async_setup_entry(
                 )
             )
 
+    # Add temperature sensors
+    try:
+        from .temperature_sensors import async_setup_entry as setup_temperature_sensors
+        await setup_temperature_sensors(hass, entry, async_add_entities)
+    except Exception as err:
+        _LOGGER.warning("Failed to set up temperature sensors: %s", err)
+
     async_add_entities(ariston_sensors)
 
 
