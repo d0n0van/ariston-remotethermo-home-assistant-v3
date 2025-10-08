@@ -47,6 +47,10 @@ class BatchedDeviceDataUpdateCoordinator(DataUpdateCoordinator):
         self._is_updating = False
         self._update_results: Dict[CallType, Any] = {}
 
+    async def async_update(self) -> None:
+        """Public method to trigger coordinator update."""
+        await self._async_batched_update()
+
     async def _async_batched_update(self) -> Dict[str, Any]:
         """Perform batched update for multiple call types."""
         if self._is_updating:
