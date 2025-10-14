@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 import weakref
+import re
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -48,7 +49,7 @@ class APICallManager:
         self._failure_count = 0
         self._last_failure_time: Optional[datetime] = None
         self._call_stats: Dict[CallType, Dict[str, int]] = {
-            call_type: {"success": 0, "failure": 0, "cached": 0}
+            call_type: {"success": 0, "failure": 0, "cached": 0, "rate_limited": 0}
             for call_type in CallType
         }
         
@@ -57,15 +58,17 @@ class APICallManager:
         self._failure_window = timedelta(minutes=5)
         self._recovery_timeout = timedelta(minutes=2)
         
-        # Rate limiting
-        self._min_call_interval = timedelta(seconds=2)  # Minimum 2 seconds between calls
-        self._batch_window = timedelta(seconds=5)  # Batch calls within 5 seconds
+        # Rate limiting - increased intervals to prevent 429 errors
+        self._min_call_interval = timedelta(seconds=5)  # Minimum 5 seconds between calls
+        self._batch_window = timedelta(seconds=10)  # Batch calls within 10 seconds
+        self._last_429_time: Optional[datetime] = None
+        self._consecutive_429_count = 0
         
-        # Cache TTL configuration
-        self._cache_ttl[CallType.STATE_UPDATE] = timedelta(seconds=30)  # 30 seconds
-        self._cache_ttl[CallType.BUS_ERRORS] = timedelta(minutes=5)     # 5 minutes
-        self._cache_ttl[CallType.ENERGY_DATA] = timedelta(minutes=10)   # 10 minutes
-        self._cache_ttl[CallType.FEATURES] = timedelta(hours=1)         # 1 hour
+        # Cache TTL configuration - extended to reduce API calls during rate limiting
+        self._cache_ttl[CallType.STATE_UPDATE] = timedelta(minutes=2)   # 2 minutes
+        self._cache_ttl[CallType.BUS_ERRORS] = timedelta(minutes=10)    # 10 minutes
+        self._cache_ttl[CallType.ENERGY_DATA] = timedelta(minutes=15)   # 15 minutes
+        self._cache_ttl[CallType.FEATURES] = timedelta(hours=2)         # 2 hours
         self._cache_ttl[CallType.USER_ACTION] = timedelta(seconds=0)    # No caching for user actions
 
     async def call_with_retry(
@@ -170,8 +173,17 @@ class APICallManager:
         last_call = self._last_call_time.get(call_type)
         if last_call is not None:
             time_since_last = datetime.now() - last_call
-            if time_since_last < self._min_call_interval:
-                sleep_time = (self._min_call_interval - time_since_last).total_seconds()
+            
+            # Use longer intervals if we've had recent 429 errors
+            min_interval = self._min_call_interval
+            if self._consecutive_429_count > 0:
+                # Increase interval based on consecutive 429 errors
+                multiplier = min(2 ** self._consecutive_429_count, 8)  # Cap at 8x
+                min_interval = timedelta(seconds=self._min_call_interval.total_seconds() * multiplier)
+                _LOGGER.debug("Using extended rate limit due to 429 errors: %.2f seconds", min_interval.total_seconds())
+            
+            if time_since_last < min_interval:
+                sleep_time = (min_interval - time_since_last).total_seconds()
                 _LOGGER.debug("Rate limiting: sleeping for %.2f seconds", sleep_time)
                 await asyncio.sleep(sleep_time)
         
@@ -206,20 +218,52 @@ class APICallManager:
                 last_exception = err
                 
                 if attempt < max_retries:
-                    # Calculate delay with exponential backoff and jitter
-                    delay = base_delay * (2 ** attempt)
-                    jitter = delay * 0.1 * (0.5 - asyncio.get_event_loop().time() % 1)  # ±10% jitter
-                    total_delay = max(0, delay + jitter)
+                    # Check if this is a 429 error and handle accordingly
+                    if self._is_http_429_error(err):
+                        self._consecutive_429_count += 1
+                        self._last_429_time = datetime.now()
+                        self._call_stats[call_type]["rate_limited"] += 1
+                        
+                        # Try to extract retry-after header value
+                        retry_after = self._extract_retry_after(err)
+                        if retry_after:
+                            delay = retry_after
+                            _LOGGER.warning(
+                                "%s call failed with 429 (attempt %d/%d), using Retry-After: %ds: %s",
+                                call_type.value,
+                                attempt + 1,
+                                max_retries + 1,
+                                delay,
+                                err,
+                            )
+                        else:
+                            # Calculate delay based on 429 error patterns
+                            delay = self._calculate_429_delay(call_type)
+                            _LOGGER.warning(
+                                "%s call failed with 429 (attempt %d/%d), retrying in %.2fs: %s",
+                                call_type.value,
+                                attempt + 1,
+                                max_retries + 1,
+                                delay,
+                                err,
+                            )
+                    else:
+                        # Regular error handling with exponential backoff
+                        self._consecutive_429_count = 0  # Reset 429 counter on non-429 errors
+                        delay = base_delay * (2 ** attempt)
+                        jitter = delay * 0.1 * (0.5 - asyncio.get_event_loop().time() % 1)  # ±10% jitter
+                        delay = max(0, delay + jitter)
+                        
+                        _LOGGER.warning(
+                            "%s call failed (attempt %d/%d), retrying in %.2fs: %s",
+                            call_type.value,
+                            attempt + 1,
+                            max_retries + 1,
+                            delay,
+                            err,
+                        )
                     
-                    _LOGGER.warning(
-                        "%s call failed (attempt %d/%d), retrying in %.2fs: %s",
-                        call_type.value,
-                        attempt + 1,
-                        max_retries + 1,
-                        total_delay,
-                        err,
-                    )
-                    await asyncio.sleep(total_delay)
+                    await asyncio.sleep(delay)
                 else:
                     _LOGGER.error(
                         "%s call failed after %d attempts: %s",
@@ -274,6 +318,14 @@ class APICallManager:
         self._failure_count += 1
         self._last_failure_time = datetime.now()
         
+        # Don't open circuit breaker for 429 errors - they're temporary
+        if self._consecutive_429_count > 0:
+            _LOGGER.debug(
+                "Skipping circuit breaker for 429 error (consecutive 429s: %d)",
+                self._consecutive_429_count
+            )
+            return
+        
         if self._failure_count >= self._max_failures:
             self._circuit_breaker_state = CircuitBreakerState.OPEN
             _LOGGER.warning(
@@ -288,6 +340,44 @@ class APICallManager:
             _LOGGER.info("Circuit breaker reset to CLOSED state")
         self._circuit_breaker_state = CircuitBreakerState.CLOSED
         self._failure_count = 0
+        self._consecutive_429_count = 0
+
+    def _is_http_429_error(self, error: Exception) -> bool:
+        """Check if the error is an HTTP 429 (Too Many Requests) error."""
+        error_str = str(error)
+        # Check for common 429 error patterns
+        return (
+            "429" in error_str or
+            "Too Many Requests" in error_str or
+            "Requests are blocked" in error_str or
+            "rate limit" in error_str.lower()
+        )
+
+    def _extract_retry_after(self, error: Exception) -> Optional[int]:
+        """Extract Retry-After value from error message if available."""
+        error_str = str(error)
+        # Look for retry-after patterns in the error message
+        retry_after_match = re.search(r'retry[_\s-]?after[:\s]*(\d+)', error_str, re.IGNORECASE)
+        if retry_after_match:
+            return int(retry_after_match.group(1))
+        return None
+
+    def _calculate_429_delay(self, call_type: CallType) -> float:
+        """Calculate appropriate delay for 429 errors."""
+        base_delay = self._get_base_delay(call_type)
+        
+        # Increase delay based on consecutive 429 errors
+        multiplier = 2 ** min(self._consecutive_429_count, 5)  # Cap at 32x
+        delay = base_delay * multiplier
+        
+        # Add extra delay if we've had recent 429 errors
+        if self._last_429_time:
+            time_since_429 = (datetime.now() - self._last_429_time).total_seconds()
+            if time_since_429 < 60:  # Within last minute
+                delay *= 1.5
+        
+        # Cap the maximum delay at 5 minutes
+        return min(delay, 300.0)
 
     def clear_cache(self, call_type: Optional[CallType] = None) -> None:
         """Clear cache for specific call type or all types."""
@@ -303,7 +393,7 @@ class APICallManager:
     def get_call_stats(self) -> Dict[str, Any]:
         """Get call statistics for monitoring."""
         total_calls = sum(
-            stats["success"] + stats["failure"] + stats["cached"]
+            stats["success"] + stats["failure"] + stats["cached"] + stats["rate_limited"]
             for stats in self._call_stats.values()
         )
         
@@ -311,6 +401,8 @@ class APICallManager:
             "total_calls": total_calls,
             "circuit_breaker_state": self._circuit_breaker_state.value,
             "failure_count": self._failure_count,
+            "consecutive_429_count": self._consecutive_429_count,
+            "last_429_time": self._last_429_time.isoformat() if self._last_429_time else None,
             "cache_size": len(self._cache),
             "call_breakdown": {
                 call_type.value: stats for call_type, stats in self._call_stats.items()
