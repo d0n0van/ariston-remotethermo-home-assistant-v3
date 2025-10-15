@@ -208,13 +208,9 @@ async def _initialize_device(hass: HomeAssistant, ariston: Ariston, config: dict
 
     _LOGGER.info("Successfully initialized device: %s", device.name)
     
-    # Get device features (non-critical, continue if fails)
-    try:
-        await device.async_get_features()
-        _LOGGER.debug("Retrieved device features for: %s", device.name)
-    except Exception as err:
-        _LOGGER.warning("Failed to get device features: %s", err)
-        # Continue setup even if features fail - device might still work
+    # Device features will be retrieved by the coordinators
+    # No direct API calls during setup to avoid 429 conflicts
+    _LOGGER.debug("Device initialized for: %s (features will be retrieved by coordinators)", device.name)
     
     return device
 

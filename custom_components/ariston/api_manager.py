@@ -36,6 +36,12 @@ class CircuitBreakerState(Enum):
 
 class APICallManager:
     """Manages API calls with caching, batching, and circuit breaker pattern."""
+    
+    # Global state for rate limiting across all instances
+    _global_429_lock = asyncio.Lock()
+    _global_429_time: Optional[datetime] = None
+    _global_429_count = 0
+    _global_pause_until: Optional[datetime] = None
 
     def __init__(self, hass: HomeAssistant, device: Any) -> None:
         """Initialize the API call manager."""
@@ -80,6 +86,9 @@ class APICallManager:
         **kwargs
     ) -> Any:
         """Make an API call with caching, batching, and retry logic."""
+        
+        # Check global 429 rate limiting first
+        await self._check_global_429_rate_limit()
         
         # Check circuit breaker
         if not self._is_circuit_breaker_closed():
@@ -212,6 +221,9 @@ class APICallManager:
                 )
                 
                 result = await call_func(*args, **kwargs)
+                
+                # Reset global 429 state on successful call
+                await self._update_global_429_state(False)
                 return result
                 
             except Exception as err:
@@ -223,6 +235,9 @@ class APICallManager:
                         self._consecutive_429_count += 1
                         self._last_429_time = datetime.now()
                         self._call_stats[call_type]["rate_limited"] += 1
+                        
+                        # Update global 429 state
+                        await self._update_global_429_state(True)
                         
                         # Try to extract retry-after header value
                         retry_after = self._extract_retry_after(err)
@@ -250,6 +265,8 @@ class APICallManager:
                     else:
                         # Regular error handling with exponential backoff
                         self._consecutive_429_count = 0  # Reset 429 counter on non-429 errors
+                        # Reset global 429 state on non-429 errors
+                        await self._update_global_429_state(False)
                         delay = base_delay * (2 ** attempt)
                         jitter = delay * 0.1 * (0.5 - asyncio.get_event_loop().time() % 1)  # ±10% jitter
                         delay = max(0, delay + jitter)
@@ -378,6 +395,47 @@ class APICallManager:
         
         # Cap the maximum delay at 5 minutes
         return min(delay, 300.0)
+
+    async def _check_global_429_rate_limit(self) -> None:
+        """Check global 429 rate limiting across all API manager instances."""
+        async with self._global_429_lock:
+            now = datetime.now()
+            
+            # If we're in a global pause period, wait
+            if self._global_pause_until and now < self._global_pause_until:
+                wait_time = (self._global_pause_until - now).total_seconds()
+                _LOGGER.warning(
+                    "Global 429 rate limit active, waiting %.2f seconds before API call",
+                    wait_time
+                )
+                await asyncio.sleep(wait_time)
+                self._global_pause_until = None
+
+    async def _update_global_429_state(self, is_429_error: bool) -> None:
+        """Update global 429 state when a 429 error occurs."""
+        async with self._global_429_lock:
+            now = datetime.now()
+            
+            if is_429_error:
+                self._global_429_count += 1
+                self._global_429_time = now
+                
+                # Calculate global pause time based on consecutive 429 errors
+                # Start with 2 minutes, double for each consecutive 429, max 30 minutes
+                pause_minutes = min(2 * (2 ** min(self._global_429_count - 1, 4)), 30)
+                self._global_pause_until = now + timedelta(minutes=pause_minutes)
+                
+                _LOGGER.warning(
+                    "Global 429 rate limit activated: %d consecutive errors, pausing all API calls for %d minutes",
+                    self._global_429_count,
+                    pause_minutes
+                )
+            else:
+                # Reset global 429 count on successful calls
+                if self._global_429_count > 0:
+                    _LOGGER.info("Resetting global 429 rate limit after successful call")
+                self._global_429_count = 0
+                self._global_pause_until = None
 
     def clear_cache(self, call_type: Optional[CallType] = None) -> None:
         """Clear cache for specific call type or all types."""
