@@ -186,16 +186,40 @@ class AristonOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_SCAN_INTERVAL,
                         default=scan_interval,
-                    ): int,
+                        description={
+                            "suggested_value": 300,
+                            "description": "Main state update interval in seconds. Recommended: 300+ to avoid rate limiting. Lower values may cause 429 errors."
+                        }
+                    ): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=60, max=3600)
+                    ),
                     vol.Optional(
                         ENERGY_SCAN_INTERVAL,
                         default=energy_scan_interval,
-                    ): int,
+                        description={
+                            "suggested_value": 120,
+                            "description": "Energy data update interval in minutes. Recommended: 120+ to avoid rate limiting."
+                        }
+                    ): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=30, max=720)
+                    ),
                     vol.Optional(
                         BUS_ERRORS_SCAN_INTERVAL,
                         default=bus_errors_scan_interval,
-                    ): int,
+                        description={
+                            "suggested_value": 1200,
+                            "description": "Bus errors update interval in seconds. Recommended: 1200+ to avoid rate limiting."
+                        }
+                    ): vol.All(
+                        vol.Coerce(int),
+                        vol.Range(min=300, max=7200)
+                    ),
                 }
             ),
             last_step=True,
+            description_placeholders={
+                "rate_limit_warning": "⚠️ WARNING: Setting intervals too low may cause 429 rate limiting errors. The Ariston API has strict rate limits. Use the recommended values above to avoid issues."
+            }
         )

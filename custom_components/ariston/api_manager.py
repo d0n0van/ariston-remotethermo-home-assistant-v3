@@ -65,16 +65,16 @@ class APICallManager:
         self._recovery_timeout = timedelta(minutes=2)
         
         # Rate limiting - increased intervals to prevent 429 errors
-        self._min_call_interval = timedelta(seconds=5)  # Minimum 5 seconds between calls
-        self._batch_window = timedelta(seconds=10)  # Batch calls within 10 seconds
+        self._min_call_interval = timedelta(seconds=15)  # Minimum 15 seconds between calls
+        self._batch_window = timedelta(seconds=30)  # Batch calls within 30 seconds
         self._last_429_time: Optional[datetime] = None
         self._consecutive_429_count = 0
         
         # Cache TTL configuration - extended to reduce API calls during rate limiting
-        self._cache_ttl[CallType.STATE_UPDATE] = timedelta(minutes=2)   # 2 minutes
-        self._cache_ttl[CallType.BUS_ERRORS] = timedelta(minutes=10)    # 10 minutes
-        self._cache_ttl[CallType.ENERGY_DATA] = timedelta(minutes=15)   # 15 minutes
-        self._cache_ttl[CallType.FEATURES] = timedelta(hours=2)         # 2 hours
+        self._cache_ttl[CallType.STATE_UPDATE] = timedelta(minutes=5)   # 5 minutes
+        self._cache_ttl[CallType.BUS_ERRORS] = timedelta(minutes=30)    # 30 minutes
+        self._cache_ttl[CallType.ENERGY_DATA] = timedelta(minutes=60)   # 60 minutes
+        self._cache_ttl[CallType.FEATURES] = timedelta(hours=4)         # 4 hours
         self._cache_ttl[CallType.USER_ACTION] = timedelta(seconds=0)    # No caching for user actions
 
     async def call_with_retry(
@@ -305,13 +305,13 @@ class APICallManager:
     def _get_base_delay(self, call_type: CallType) -> float:
         """Get base delay for exponential backoff."""
         delay_config = {
-            CallType.STATE_UPDATE: 1.0,
-            CallType.BUS_ERRORS: 2.0,
-            CallType.ENERGY_DATA: 2.0,
-            CallType.FEATURES: 3.0,
-            CallType.USER_ACTION: 0.5,  # User actions retry faster
+            CallType.STATE_UPDATE: 3.0,  # Increased from 1.0
+            CallType.BUS_ERRORS: 5.0,    # Increased from 2.0
+            CallType.ENERGY_DATA: 5.0,   # Increased from 2.0
+            CallType.FEATURES: 8.0,      # Increased from 3.0
+            CallType.USER_ACTION: 1.0,   # Increased from 0.5
         }
-        return delay_config.get(call_type, 1.0)
+        return delay_config.get(call_type, 3.0)
 
     def _is_circuit_breaker_closed(self) -> bool:
         """Check if circuit breaker allows calls."""
@@ -383,18 +383,18 @@ class APICallManager:
         """Calculate appropriate delay for 429 errors."""
         base_delay = self._get_base_delay(call_type)
         
-        # Increase delay based on consecutive 429 errors
-        multiplier = 2 ** min(self._consecutive_429_count, 5)  # Cap at 32x
+        # Increase delay based on consecutive 429 errors - more aggressive
+        multiplier = 2 ** min(self._consecutive_429_count, 6)  # Cap at 64x
         delay = base_delay * multiplier
         
         # Add extra delay if we've had recent 429 errors
         if self._last_429_time:
             time_since_429 = (datetime.now() - self._last_429_time).total_seconds()
-            if time_since_429 < 60:  # Within last minute
-                delay *= 1.5
+            if time_since_429 < 120:  # Within last 2 minutes
+                delay *= 2.0  # Double the delay for recent 429s
         
-        # Cap the maximum delay at 5 minutes
-        return min(delay, 300.0)
+        # Cap the maximum delay at 10 minutes (increased from 5)
+        return min(delay, 600.0)
 
     async def _check_global_429_rate_limit(self) -> None:
         """Check global 429 rate limiting across all API manager instances."""
@@ -421,8 +421,8 @@ class APICallManager:
                 self._global_429_time = now
                 
                 # Calculate global pause time based on consecutive 429 errors
-                # Start with 2 minutes, double for each consecutive 429, max 30 minutes
-                pause_minutes = min(2 * (2 ** min(self._global_429_count - 1, 4)), 30)
+                # Start with 5 minutes, double for each consecutive 429, max 60 minutes
+                pause_minutes = min(5 * (2 ** min(self._global_429_count - 1, 4)), 60)
                 self._global_pause_until = now + timedelta(minutes=pause_minutes)
                 
                 _LOGGER.warning(
