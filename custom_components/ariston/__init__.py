@@ -261,6 +261,8 @@ async def _setup_coordinators(hass: HomeAssistant, entry: ConfigEntry, device: A
             [CallType.ENERGY_DATA]
         )
         hass.data[DOMAIN][entry.unique_id][ENERGY_COORDINATOR] = energy_coordinator
+    else:
+        energy_coordinator = None
     
     # Start the smart coordinator manager
     await smart_manager.start()
@@ -268,7 +270,7 @@ async def _setup_coordinators(hass: HomeAssistant, entry: ConfigEntry, device: A
     # Perform initial refresh
     await main_coordinator.async_update()
     await bus_errors_coordinator.async_update()
-    if device.has_metering:
+    if energy_coordinator:
         await energy_coordinator.async_update()
     
     _LOGGER.info(

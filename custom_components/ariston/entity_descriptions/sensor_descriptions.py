@@ -171,3 +171,9 @@ ARISTON_SENSOR_TYPES = create_sensor_descriptions()
 
 
 
+
+
+
+
+
+

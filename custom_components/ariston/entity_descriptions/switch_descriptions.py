@@ -22,3 +22,9 @@ ARISTON_SWITCH_TYPES = create_switch_descriptions()
 
 
 
+
+
+
+
+
+
