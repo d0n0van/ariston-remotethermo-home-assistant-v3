@@ -64,9 +64,6 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     ) -> None:
         """Initialize the thermostat."""
         super().__init__(coordinator, description, zone)
-        self._last_hvac_mode = None
-        self._hvac_mode_stable_count = 0
-        self._hvac_mode_change_time = None
 
     @property
     def name(self) -> str:
@@ -137,8 +134,8 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> str:
         """Return the current HVAC mode for the device."""
-        from datetime import datetime, timedelta
-        
+        # Simply read the current state - don't try to "fix" or change anything
+        # The thermostat should control the HVAC mode, not Home Assistant
         curr_hvac_mode = HVACMode.OFF
 
         if self.device.is_plant_in_heat_mode:
@@ -152,39 +149,14 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             elif self.device.is_zone_in_time_program_mode(self.zone):
                 curr_hvac_mode = HVACMode.AUTO
         
-        # Add stability to prevent rapid HVAC mode changes
-        now = datetime.now()
-        
-        # If this is the same mode as last time, increment stable count
-        if curr_hvac_mode == self._last_hvac_mode:
-            self._hvac_mode_stable_count += 1
-        else:
-            # Mode changed, reset counters
-            self._hvac_mode_stable_count = 1
-            self._hvac_mode_change_time = now
-            self._last_hvac_mode = curr_hvac_mode
-        
-        # Only change HVAC mode if it's been stable for at least 3 consecutive readings
-        # or if it's been more than 30 seconds since last change
-        if (self._hvac_mode_stable_count >= 3 or 
-            (self._hvac_mode_change_time and 
-             now - self._hvac_mode_change_time > timedelta(seconds=30))):
-            # Mode is stable, use it
-            pass
-        else:
-            # Mode is not stable yet, keep the previous mode if we have one
-            if self._last_hvac_mode is not None:
-                curr_hvac_mode = self._last_hvac_mode
-        
         # Debug logging for HVAC mode determination
         _LOGGER.debug(
-            "HVAC mode for %s zone %s: %s (plant_heat: %s, plant_cool: %s, zone_manual: %s, zone_time_program: %s, stable_count: %d)",
+            "HVAC mode for %s zone %s: %s (plant_heat: %s, plant_cool: %s, zone_manual: %s, zone_time_program: %s)",
             self.name, self.zone, curr_hvac_mode,
             self.device.is_plant_in_heat_mode,
             self.device.is_plant_in_cool_mode,
             self.device.is_zone_in_manual_mode(self.zone),
-            self.device.is_zone_in_time_program_mode(self.zone),
-            self._hvac_mode_stable_count
+            self.device.is_zone_in_time_program_mode(self.zone)
         )
         
         return curr_hvac_mode
@@ -323,24 +295,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             self.name,
         )
 
-        # Ensure zone is in manual mode to accept temperature settings
-        if not self.device.is_zone_in_manual_mode(self.zone):
-            _LOGGER.debug(
-                "Zone %s not in manual mode, switching to manual mode for temperature setting",
-                self.zone
-            )
-            if self.device.plant_mode_supported:
-                # For GALEVO/BSB systems with plant mode support
-                await self.device.async_set_zone_mode(ZoneMode.MANUAL, self.zone)
-            else:
-                # For BSB systems without plant mode support
-                from ariston.const import BsbZoneMode
-                await self.device.async_set_zone_mode(BsbZoneMode.MANUAL, self.zone)
-
+        # Only set temperature - let the thermostat handle HVAC mode
+        # Don't force zone mode changes as the thermostat should control this
         await self.device.async_set_comfort_temp(temperature, self.zone)
-        
-        # Reset HVAC mode stability counters after user action
-        self._hvac_mode_stable_count = 0
-        self._hvac_mode_change_time = None
-        
         self.async_write_ha_state()
