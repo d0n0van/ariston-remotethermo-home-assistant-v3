@@ -46,12 +46,43 @@ class TemperatureSensor(AristonEntity, SensorEntity):
         super().__init__(coordinator, description, zone)
         self._get_value_func = get_value_func
         self._get_unit_func = get_unit_func
+        self._last_value = None
+        self._value_change_count = 0
 
     @property
     def native_value(self) -> float | None:
         """Return the temperature value."""
         try:
-            return self._get_value_func(self)
+            value = self._get_value_func(self)
+            if value is None:
+                _LOGGER.debug("Temperature value is None for %s", self.name)
+                return None
+            
+            # Validate temperature range (-50°C to 100°C)
+            if not isinstance(value, (int, float)):
+                _LOGGER.warning("Invalid temperature value type for %s: %s (type: %s)", 
+                             self.name, value, type(value))
+                return None
+                
+            if value < -50 or value > 100:
+                _LOGGER.warning("Temperature value out of range for %s: %s°C", self.name, value)
+                return None
+            
+            # Track value changes for debugging
+            float_value = float(value)
+            if self._last_value is not None:
+                if abs(float_value - self._last_value) > 0.1:  # Only log significant changes
+                    self._value_change_count += 1
+                    _LOGGER.debug("Temperature change for %s: %.1f°C -> %.1f°C (change #%d)", 
+                                self.name, self._last_value, float_value, self._value_change_count)
+                    
+                    # Log warning if values are fluctuating too much
+                    if self._value_change_count > 10:
+                        _LOGGER.warning("High temperature fluctuation detected for %s: %d changes", 
+                                      self.name, self._value_change_count)
+            
+            self._last_value = float_value
+            return float_value
         except Exception as err:
             _LOGGER.warning("Failed to get temperature value for %s: %s", self.name, err)
             return None
@@ -91,8 +122,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 sensor_key=f"zone_{zone_number}_current_temperature",
                 sensor_name=f"{device.name} Zone {zone_number} Current Temperature",
-                get_value_func=lambda entity: entity.device.get_measured_temp_value(entity.zone),
-                get_unit_func=lambda entity: entity.device.get_measured_temp_unit(entity.zone),
+                get_value_func=lambda entity, zone=zone_number: entity.device.get_measured_temp_value(zone),
+                get_unit_func=lambda entity, zone=zone_number: entity.device.get_measured_temp_unit(zone),
                 zone=zone_number,
             )
             temperature_sensors.append(current_temp_sensor)
@@ -102,8 +133,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 sensor_key=f"zone_{zone_number}_target_temperature",
                 sensor_name=f"{device.name} Zone {zone_number} Target Temperature",
-                get_value_func=lambda entity: entity.device.get_target_temp_value(entity.zone),
-                get_unit_func=lambda entity: entity.device.get_measured_temp_unit(entity.zone),
+                get_value_func=lambda entity, zone=zone_number: entity.device.get_target_temp_value(zone),
+                get_unit_func=lambda entity, zone=zone_number: entity.device.get_measured_temp_unit(zone),
                 zone=zone_number,
             )
             temperature_sensors.append(target_temp_sensor)
@@ -113,8 +144,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 sensor_key=f"zone_{zone_number}_comfort_temperature",
                 sensor_name=f"{device.name} Zone {zone_number} Comfort Temperature",
-                get_value_func=lambda entity: entity.device.get_comfort_temp_value(entity.zone),
-                get_unit_func=lambda entity: entity.device.get_measured_temp_unit(entity.zone),
+                get_value_func=lambda entity, zone=zone_number: entity.device.get_comfort_temp_value(zone),
+                get_unit_func=lambda entity, zone=zone_number: entity.device.get_measured_temp_unit(zone),
                 zone=zone_number,
             )
             temperature_sensors.append(comfort_temp_sensor)
@@ -124,8 +155,8 @@ async def async_setup_entry(
                 coordinator=coordinator,
                 sensor_key=f"zone_{zone_number}_economy_temperature",
                 sensor_name=f"{device.name} Zone {zone_number} Economy Temperature",
-                get_value_func=lambda entity: entity.device.get_economy_temp_value(entity.zone),
-                get_unit_func=lambda entity: entity.device.get_measured_temp_unit(entity.zone),
+                get_value_func=lambda entity, zone=zone_number: entity.device.get_economy_temp_value(zone),
+                get_unit_func=lambda entity, zone=zone_number: entity.device.get_measured_temp_unit(zone),
                 zone=zone_number,
             )
             temperature_sensors.append(economy_temp_sensor)

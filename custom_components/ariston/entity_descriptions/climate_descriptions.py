@@ -59,3 +59,5 @@ ARISTON_CLIMATE_TYPES = create_climate_descriptions()
 
 
 
+
+
