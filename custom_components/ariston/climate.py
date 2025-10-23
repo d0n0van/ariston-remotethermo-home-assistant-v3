@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from ariston.const import PlantMode, ZoneMode, BsbZoneMode
+# PlantMode, ZoneMode, BsbZoneMode imports removed - no longer needed after removing setters
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
