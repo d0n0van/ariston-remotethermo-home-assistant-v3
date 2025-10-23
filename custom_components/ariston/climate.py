@@ -120,16 +120,9 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     @property
     def supported_features(self) -> int:
         """Return the supported features for this device integration."""
+        # Only support temperature setting - let thermostat control everything else
         features = ClimateEntityFeature.TARGET_TEMPERATURE
-        if hasattr(ClimateEntityFeature, "TURN_OFF"):
-            features |= ClimateEntityFeature.TURN_OFF
-        if hasattr(ClimateEntityFeature, "TURN_ON"):
-            features |= ClimateEntityFeature.TURN_ON
-        return (
-            features | ClimateEntityFeature.PRESET_MODE
-            if self.device.plant_mode_supported
-            else features
-        )
+        return features
 
     @property
     def hvac_mode(self) -> str:
@@ -161,21 +154,7 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         
         return curr_hvac_mode
 
-    @property
-    def hvac_modes(self) -> list[str]:
-        """Return the HVAC modes support by the device."""
-        supported_modes = []
-        if self.device.is_zone_mode_options_contains_manual(self.zone):
-            supported_modes.append(HVACMode.HEAT)
-            if self.device.plant_mode_supported:
-                if self.device.is_plant_mode_options_contains_cooling:
-                    supported_modes.append(HVACMode.COOL)
-        if self.device.is_zone_mode_options_contains_time_program(self.zone):
-            supported_modes.append(HVACMode.AUTO)
-        if self.device.is_zone_mode_options_contains_off(self.zone):
-            supported_modes.append(HVACMode.OFF)
-
-        return supported_modes
+    # hvac_modes property removed - thermostat controls HVAC modes
 
     @property
     def hvac_action(self):
@@ -200,88 +179,11 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         """Return the current preset mode, e.g., home, away, temp."""
         return self.device.plant_mode_text
 
-    @property
-    def preset_modes(self) -> list[str]:
-        """Return a list of available preset modes."""
-        return self.device.plant_mode_opt_texts
+    # preset_modes property removed - thermostat controls preset modes
 
-    async def async_set_hvac_mode(self, hvac_mode):
-        """Set new target hvac mode."""
-        if self.device.plant_mode_supported:
-            plant_modes = self.device.plant_mode_options
-            zone_modes = self.device.get_zone_mode_options(self.zone)
-            current_plant_mode = self.device.plant_mode
+    # async_set_hvac_mode removed - let thermostat control HVAC mode changes
 
-            if hvac_mode == HVACMode.OFF:
-                if self.device.is_plant_mode_options_contains_off:
-                    await self.device.async_set_plant_mode(PlantMode.OFF)
-                else:
-                    await self.device.async_set_plant_mode(PlantMode.SUMMER)
-            elif hvac_mode == HVACMode.AUTO:
-                if current_plant_mode in [
-                    PlantMode.WINTER,
-                    PlantMode.HEATING_ONLY,
-                    PlantMode.COOLING,
-                ]:
-                    # if already heating or cooling just change CH mode
-                    pass
-                elif current_plant_mode == PlantMode.SUMMER:
-                    # DHW is working, so use Winter where CH and DHW are active
-                    await self.device.async_set_plant_mode(PlantMode.WINTER)
-                # hvac is OFF, so use heating only, if not supported then winter
-                elif PlantMode.HEATING_ONLY in plant_modes:
-                    await self.device.async_set_plant_mode(PlantMode.HEATING_ONLY)
-                else:
-                    await self.device.async_set_plant_mode(PlantMode.WINTER)
-                await self.device.async_set_zone_mode(ZoneMode.TIME_PROGRAM, self.zone)
-            elif hvac_mode == HVACMode.HEAT:
-                if current_plant_mode in [PlantMode.WINTER, PlantMode.HEATING_ONLY]:
-                    # if already heating, change CH mode
-                    pass
-                elif current_plant_mode in [PlantMode.SUMMER, PlantMode.COOLING]:
-                    # DHW is working, so use Winter and change mode
-                    await self.device.async_set_plant_mode(PlantMode.WINTER)
-                # hvac is OFF, so use heating only, if not supported then winter
-                elif PlantMode.HEATING_ONLY in plant_modes:
-                    await self.device.async_set_plant_mode(PlantMode.HEATING_ONLY)
-                else:
-                    await self.device.async_set_plant_mode(PlantMode.WINTER)
-                if ZoneMode.MANUAL_NIGHT in zone_modes:
-                    await self.device.async_set_zone_mode(
-                        ZoneMode.MANUAL_NIGHT, self.zone
-                    )
-                else:
-                    await self.device.async_set_zone_mode(ZoneMode.MANUAL, self.zone)
-            elif hvac_mode == HVACMode.COOL:
-                await self.device.async_set_plant_mode(PlantMode.COOLING)
-                if ZoneMode.MANUAL_NIGHT in zone_modes:
-                    await self.device.async_set_zone_mode(
-                        ZoneMode.MANUAL_NIGHT, self.zone
-                    )
-                else:
-                    await self.device.async_set_zone_mode(ZoneMode.MANUAL, self.zone)
-        # Plant mode is not supported (BSB device)
-        elif hvac_mode == HVACMode.OFF:
-            await self.device.async_set_zone_mode(BsbZoneMode.OFF, self.zone)
-        elif hvac_mode == HVACMode.AUTO:
-            await self.device.async_set_zone_mode(BsbZoneMode.TIME_PROGRAM, self.zone)
-        elif hvac_mode == HVACMode.HEAT:
-            await self.device.async_set_zone_mode(BsbZoneMode.MANUAL, self.zone)
-
-        self.async_write_ha_state()
-
-    async def async_set_preset_mode(self, preset_mode):
-        """Set new target preset mode."""
-        _LOGGER.debug(
-            "Setting preset mode to %s for %s",
-            preset_mode,
-            self.name,
-        )
-
-        await self.device.async_set_plant_mode(
-            PlantMode(self.device.plant_mode_opt_texts.index(preset_mode)),
-        )
-        self.async_write_ha_state()
+    # async_set_preset_mode removed - let thermostat control preset mode changes
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
