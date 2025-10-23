@@ -146,6 +146,17 @@ class AristonThermostat(AristonEntity, ClimateEntity):
                 curr_hvac_mode = HVACMode.COOL
             elif self.device.is_zone_in_time_program_mode(self.zone):
                 curr_hvac_mode = HVACMode.AUTO
+        
+        # Debug logging for HVAC mode determination
+        _LOGGER.debug(
+            "HVAC mode for %s zone %s: %s (plant_heat: %s, plant_cool: %s, zone_manual: %s, zone_time_program: %s)",
+            self.name, self.zone, curr_hvac_mode,
+            self.device.is_plant_in_heat_mode,
+            self.device.is_plant_in_cool_mode,
+            self.device.is_zone_in_manual_mode(self.zone),
+            self.device.is_zone_in_time_program_mode(self.zone)
+        )
+        
         return curr_hvac_mode
 
     @property
@@ -281,6 +292,20 @@ class AristonThermostat(AristonEntity, ClimateEntity):
             temperature,
             self.name,
         )
+
+        # Ensure zone is in manual mode to accept temperature settings
+        if not self.device.is_zone_in_manual_mode(self.zone):
+            _LOGGER.debug(
+                "Zone %s not in manual mode, switching to manual mode for temperature setting",
+                self.zone
+            )
+            if self.device.plant_mode_supported:
+                # For GALEVO/BSB systems with plant mode support
+                await self.device.async_set_zone_mode(ZoneMode.MANUAL, self.zone)
+            else:
+                # For BSB systems without plant mode support
+                from ariston.const import BsbZoneMode
+                await self.device.async_set_zone_mode(BsbZoneMode.MANUAL, self.zone)
 
         await self.device.async_set_comfort_temp(temperature, self.zone)
         self.async_write_ha_state()
