@@ -64,3 +64,4 @@ ARISTON_WATER_HEATER_TYPES = create_water_heater_descriptions()
 
 
 
+

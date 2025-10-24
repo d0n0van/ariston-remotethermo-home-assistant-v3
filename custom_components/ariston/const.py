@@ -713,6 +713,18 @@ ARISTON_SWITCH_TYPES: list[AristonSwitchEntityDescription] = [
         whe_types=[WheType.NuosSplit],
     ),
     AristonSwitchEntityDescription(
+        key=NuosSplitProperties.BOOST_ON,
+        name=f"{NAME} boost",
+        icon="mdi:car-turbocharger",
+        entity_category=EntityCategory.CONFIG,
+        set_value=lambda entity, value: entity.device.async_set_water_heater_boost(
+            value
+        ),
+        get_is_on=lambda entity: entity.device.water_heater_boost,
+        system_types=[SystemType.VELIS],
+        whe_types=[WheType.Andris2],
+    ),
+    AristonSwitchEntityDescription(
         key=SeDeviceSettings.SE_PERMANENT_BOOST_ON_OFF,
         name=f"{NAME} permanent boost",
         icon="mdi:car-turbocharger",
