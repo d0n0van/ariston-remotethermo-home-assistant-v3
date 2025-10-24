@@ -98,3 +98,4 @@ ARISTON_BINARY_SENSOR_TYPES = create_binary_sensor_descriptions()
 
 
 
+

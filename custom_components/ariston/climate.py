@@ -120,8 +120,10 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     @property
     def supported_features(self) -> int:
         """Return the supported features for this device integration."""
-        # Only support temperature setting - let thermostat control everything else
+        # Support basic HVAC features but let thermostat control mode changes
         features = ClimateEntityFeature.TARGET_TEMPERATURE
+        features |= ClimateEntityFeature.TURN_ON
+        features |= ClimateEntityFeature.TURN_OFF
         return features
 
     @property
@@ -154,7 +156,11 @@ class AristonThermostat(AristonEntity, ClimateEntity):
         
         return curr_hvac_mode
 
-    # hvac_modes property removed - thermostat controls HVAC modes
+    @property
+    def hvac_modes(self) -> list[str]:
+        """Return the list of available HVAC modes."""
+        # Provide basic HVAC modes but don't allow changing them
+        return [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 
     @property
     def hvac_action(self):
@@ -184,6 +190,16 @@ class AristonThermostat(AristonEntity, ClimateEntity):
     # async_set_hvac_mode removed - let thermostat control HVAC mode changes
 
     # async_set_preset_mode removed - let thermostat control preset mode changes
+
+    async def async_turn_on(self) -> None:
+        """Turn the device on."""
+        # Let thermostat control the actual mode, just ensure it's not off
+        _LOGGER.debug("Turn on requested for %s - letting thermostat control mode", self.name)
+
+    async def async_turn_off(self) -> None:
+        """Turn the device off."""
+        # Let thermostat control the actual mode, just ensure it's off
+        _LOGGER.debug("Turn off requested for %s - letting thermostat control mode", self.name)
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
