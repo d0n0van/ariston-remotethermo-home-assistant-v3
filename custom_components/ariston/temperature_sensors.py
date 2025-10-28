@@ -76,10 +76,11 @@ class TemperatureSensor(AristonEntity, SensorEntity):
                     _LOGGER.debug("Temperature change for %s: %.1f°C -> %.1f°C (change #%d)", 
                                 self.name, self._last_value, float_value, self._value_change_count)
                     
-                    # Log warning if values are fluctuating too much
+                    # Log warning if values are fluctuating too much, then reset counter
                     if self._value_change_count > 10:
                         _LOGGER.warning("High temperature fluctuation detected for %s: %d changes", 
                                       self.name, self._value_change_count)
+                        self._value_change_count = 0  # Reset counter after warning
             
             self._last_value = float_value
             return float_value
