@@ -720,7 +720,7 @@ ARISTON_SWITCH_TYPES: list[AristonSwitchEntityDescription] = [
         set_value=lambda entity, value: entity.device.async_set_water_heater_boost(
             value
         ),
-        get_is_on=lambda entity: entity.device.water_heater_boost,
+        get_is_on=lambda entity: getattr(entity.device, 'water_heater_boost', False),
         system_types=[SystemType.VELIS],
         whe_types=[WheType.Andris2],
     ),
