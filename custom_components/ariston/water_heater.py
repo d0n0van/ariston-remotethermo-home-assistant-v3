@@ -120,7 +120,12 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
 
     @property
     def operation_list(self):
-        """List of available operation modes."""
+        """List of available operation modes.
+        
+        Note: For Andris2 devices, BOOST mode support requires the external
+        python-ariston-api library to have BOOST = 9 added to the EvoPlantMode enum.
+        Once added, BOOST will automatically appear in this list.
+        """
         return self.device.water_heater_mode_operation_texts
 
     @property
