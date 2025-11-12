@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from ariston.const import SystemType
+from ariston.const import SystemType, WheType
 from homeassistant.components.water_heater import (
     WaterHeaterEntity,
     WaterHeaterEntityFeature,
@@ -122,16 +122,46 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
     def operation_list(self):
         """List of available operation modes.
         
-        Note: For Andris2 devices, BOOST mode support requires the external
-        python-ariston-api library to have BOOST = 9 added to the EvoPlantMode enum.
-        Once added, BOOST will automatically appear in this list.
+        For Andris2 devices, BOOST mode is added to the list even if not
+        present in the external library's enum.
         """
-        return self.device.water_heater_mode_operation_texts
+        modes = list(self.device.water_heater_mode_operation_texts)
+        # Add BOOST mode for Andris2 devices if not already present
+        if self.device.whe_type == WheType.Andris2 and "BOOST" not in modes:
+            modes.append("BOOST")
+        return modes
 
     @property
     def current_operation(self):
         """Return current operation."""
-        return self.device.water_heater_current_mode_text
+        current_mode_text = self.device.water_heater_current_mode_text
+        
+        # For Andris2 devices, check if current mode is BOOST (value 9)
+        if self.device.whe_type == WheType.Andris2:
+            try:
+                # Try to get the raw mode value to detect BOOST mode (9)
+                # Check if device has a property for the mode value
+                mode_value = getattr(self.device, 'water_heater_mode', None)
+                if mode_value is None:
+                    # Try alternative property names
+                    mode_value = getattr(self.device, 'dhw_mode', None)
+                if mode_value is None:
+                    # Try to get from device attributes
+                    mode_value = getattr(self.device, 'water_heater_mode_value', None)
+                
+                # If we found the mode value and it's 9, return BOOST
+                if mode_value == 9:
+                    return "BOOST"
+            except (AttributeError, TypeError):
+                # If we can't get the mode value, fall back to text
+                # If the text is not in the known modes list, it might be BOOST
+                known_modes = self.device.water_heater_mode_operation_texts
+                if current_mode_text not in known_modes:
+                    # Unknown mode text for Andris2 might be BOOST
+                    # But we can't be certain, so return the text as-is
+                    pass
+        
+        return current_mode_text
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -150,7 +180,12 @@ class AristonWaterHeater(AristonEntity, WaterHeaterEntity):
 
     async def async_set_operation_mode(self, operation_mode):
         """Set operation mode."""
-        await self.device.async_set_water_heater_operation_mode(operation_mode)
+        # Handle BOOST mode for Andris2 devices using direct API call
+        if operation_mode == "BOOST" and self.device.whe_type == WheType.Andris2:
+            _LOGGER.debug("Setting BOOST mode for Andris2 device via DhwMode")
+            await self.device.async_set_item_by_id("DhwMode", 9, 0)
+        else:
+            await self.device.async_set_water_heater_operation_mode(operation_mode)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
